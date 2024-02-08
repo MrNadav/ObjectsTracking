@@ -1,0 +1,4 @@
+MobileNet-SSD-master/*
+venv/*
+yolov4-tiny.cfg
+yolov4-tiny.weights
