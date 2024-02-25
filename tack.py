@@ -1,9 +1,11 @@
 import cv2
 from cvzone.FaceDetectionModule import FaceDetector
-import pyfirmata
+import serial
 import numpy as np
+import time
+stream_url = 'http://192.168.189.182/stream'
+cap = cv2.VideoCapture(stream_url)
 
-cap = cv2.VideoCapture(0)
 ws, hs = 1280, 720
 cap.set(3, ws)
 cap.set(4, hs)
@@ -12,6 +14,8 @@ if not cap.isOpened():
     print("Camera couldn't Access!!!")
     exit()
 
+ser = serial.Serial('COM3', 115200)  # Adjust 'COM7' to your ESP32's COM port
+time.sleep(2)  # Wait for the connection to establish
 
 # port = "COM7"
 # board = pyfirmata.Arduino(port)
@@ -30,21 +34,14 @@ while True:
         fx, fy = bboxs[0]["center"][0], bboxs[0]["center"][1]
         pos = [fx, fy]
         #convert coordinat to servo degree
-        servoX = np.interp(fx, [0, ws], [0, 180])
+        servoX = np.interp(fx, [0, ws], [180, 0])  # Notice the swapped positions of 180 and 0
         servoY = np.interp(fy, [0, hs], [0, 180])
-
-        if servoX < 0:
-            servoX = 0
-        elif servoX > 180:
-            servoX = 180
-        if servoY < 0:
-            servoY = 0
-        elif servoY > 180:
-            servoY = 180
-
-        servoPos[0] = servoX
-        servoPos[1] = servoY
-
+        # Clamp values to servo limits
+        servoX = max(0, min(180, servoX))
+        servoY = max(0, min(180, servoY))
+        
+        command = f"ServoX{int(servoX)}ServoY{int(servoY)}\n"
+        ser.write(command.encode())
 
         cv2.circle(img, (fx, fy), 80, (0, 0, 255), 2)
         cv2.putText(img, str(pos), (fx+15, fy-15), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2 )
@@ -64,8 +61,11 @@ while True:
     cv2.putText(img, f'Servo X: {int(servoPos[0])} deg', (50, 50), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2)
     cv2.putText(img, f'Servo Y: {int(servoPos[1])} deg', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2)
 
-    # servo_pinX.write(servoPos[0])
-    # servo_pinY.write(servoPos[1])
-
     cv2.imshow("Image", img)
-    cv2.waitKey(1)
+    if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to quit
+        break
+
+# Clean up
+cap.release()
+cv2.destroyAllWindows()
+ser.close()

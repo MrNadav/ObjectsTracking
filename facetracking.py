@@ -114,7 +114,8 @@ import cv2
 import numpy as np
 import threading
 import queue
-
+import serial
+import time
 # Load MobileNet SSD
 net = cv2.dnn.readNetFromCaffe('MobileNet-SSD-master/deploy.prototxt', 'MobileNet-SSD-master/mobilenet_iter_73000.caffemodel')
 
@@ -128,8 +129,11 @@ if not cap.isOpened():
     print("Camera couldn't Access!!!")
     exit()
 
+ser = serial.Serial('COM3', 115200)  # Adjust 'COM7' to your ESP32's COM port
+time.sleep(2)  # Wait for the connection to establish
+
 # Initialize background subtractor
-fgbg = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=16, detectShadows=True)
+fgbg = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=30, detectShadows=False)
 
 # Frame queue
 frameQueue = queue.Queue(maxsize=2)
@@ -185,9 +189,14 @@ while True:
                     class_id = int(detections[0, 0, i, 1])
                     fx, fy = x + w//2, y + h//2
 
-                    servoX = np.interp(fx, [0, ws], [0, 180])
-                    servoY = np.interp(fy, [0, hs], [0, 180])
-                    servoPos = [servoX, servoY]
+                    servoX = np.interp(fx, [0, ws], [180, 0])  # Flips direction for X servo
+                    servoY = np.interp(fy, [0, hs], [0, 180])  # Keeps original direction for Y servo
+
+                    servoX = max(0, min(180, servoX))
+                    servoY = max(0, min(180, servoY))
+                    
+                    command = f"ServoX{int(servoX)}ServoY{int(servoY)}\n"
+                    ser.write(command.encode())
 
                     # Draw detection and crosshair as before
                     cv2.circle(img, (fx, fy), 80, (0, 0, 255), 2)
@@ -213,5 +222,7 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+# Clean up
 cap.release()
 cv2.destroyAllWindows()
+ser.close()
